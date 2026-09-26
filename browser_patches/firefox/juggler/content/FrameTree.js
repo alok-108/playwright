@@ -125,6 +125,7 @@ export class FrameTree {
     const frame = this.frameForDocShell(window.docShell);
     if (!frame)
       return;
+    window.docShell.overrideHasFocus = true;
     frame._onGlobalObjectCleared();
   }
 

@@ -198,6 +198,19 @@ browserTest('should not fire blur events when interacting with more than one pag
   expect(await page2.evaluate(() => !!window['gotBlur'])).toBe(false);
 });
 
+browserTest('should not fire blur events in child frames when interacting with more than one page/context', async ({ contextFactory, browserName }) => {
+  browserTest.info().annotations.push({ type: 'issue', description: 'https://github.com/microsoft/playwright/issues/42933' });
+  const page1 = await (await contextFactory()).newPage();
+  const page2 = await (await contextFactory()).newPage();
+  await page1.setContent(`<iframe srcdoc='<button id="foo" onblur="window.gotBlur=true">foo</button>'></iframe>`);
+  await page2.setContent(`<button id="bar">bar</button>`);
+  const frame = page1.frames()[1];
+  await frame.click('#foo');
+  await page2.click('#bar');
+  expect(await frame.evaluate(() => !!window['gotBlur'])).toBe(false);
+  expect(await frame.evaluate(() => document.hasFocus())).toBe(true);
+});
+
 browserTest('should trigger hover state concurrently', async ({ browserType, headless }) => {
   browserTest.info().annotations.push({ type: 'issue', description: 'https://github.com/microsoft/playwright/issues/27969' });
   browserTest.skip(!headless, 'headed messes up with hover');
