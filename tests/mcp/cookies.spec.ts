@@ -375,3 +375,105 @@ test('browser_cookie_set and browser_cookie_get use the current tab context', as
     result: expect.stringContaining('user=default'),
   });
 });
+
+test('browser_cookie_set on about:blank with explicit domain', async ({ startClient }) => {
+  const { client } = await startClient({
+    config: { capabilities: ['storage'] },
+  });
+
+  await client.callTool({
+    name: 'browser_cookie_set',
+    arguments: { name: 'auth', value: 'token123', domain: 'example.com' },
+  });
+
+  const getResult = await client.callTool({
+    name: 'browser_cookie_get',
+    arguments: { name: 'auth' },
+  });
+
+  expect(getResult).toHaveResponse({
+    result: expect.stringContaining('auth=token123 (domain: example.com'),
+  });
+});
+
+test('browser_cookie_set on about:blank without domain reports clear error', async ({ startClient }) => {
+  const { client } = await startClient({
+    config: { capabilities: ['storage'] },
+  });
+
+  const result = await client.callTool({
+    name: 'browser_cookie_set',
+    arguments: { name: 'auth', value: 'token123' },
+  });
+
+  expect(result).toHaveResponse({
+    error: expect.stringContaining('Cannot infer cookie domain from current page URL "about:blank". Please specify "domain".'),
+    isError: true,
+  });
+});
+
+test('browser_cookie_list filters domain case-insensitively and with leading dot', async ({ startClient, server }) => {
+  const { client } = await startClient({
+    config: { capabilities: ['storage'] },
+  });
+
+  await client.callTool({
+    name: 'browser_navigate',
+    arguments: { url: server.EMPTY_PAGE },
+  });
+
+  await client.callTool({
+    name: 'browser_cookie_set',
+    arguments: { name: 'c1', value: 'v1', domain: 'example.com' },
+  });
+
+  // Filter with uppercase
+  const upperResult = await client.callTool({
+    name: 'browser_cookie_list',
+    arguments: { domain: 'EXAMPLE.COM' },
+  });
+  expect(upperResult).toHaveResponse({
+    result: expect.stringContaining('c1=v1'),
+  });
+
+  // Filter with leading dot
+  const dotResult = await client.callTool({
+    name: 'browser_cookie_list',
+    arguments: { domain: '.example.com' },
+  });
+  expect(dotResult).toHaveResponse({
+    result: expect.stringContaining('c1=v1'),
+  });
+});
+
+test('browser_cookie_delete with domain filter', async ({ startClient }) => {
+  const { client } = await startClient({
+    config: { capabilities: ['storage'] },
+  });
+
+  await client.callTool({
+    name: 'browser_cookie_set',
+    arguments: { name: 'session', value: 'a', domain: 'alpha.com' },
+  });
+  await client.callTool({
+    name: 'browser_cookie_set',
+    arguments: { name: 'session', value: 'b', domain: 'beta.com' },
+  });
+
+  // Delete only alpha.com
+  await client.callTool({
+    name: 'browser_cookie_delete',
+    arguments: { name: 'session', domain: 'alpha.com' },
+  });
+
+  const listResult = await client.callTool({
+    name: 'browser_cookie_list',
+    arguments: {},
+  });
+  expect(listResult).toHaveResponse({
+    result: expect.stringContaining('domain: beta.com'),
+  });
+  expect(listResult).toHaveResponse({
+    result: expect.not.stringContaining('domain: alpha.com'),
+  });
+});

@@ -15,7 +15,6 @@
  */
 
 import * as z from 'zod';
-import { escapeWithQuotes } from '@isomorphic/stringUtils';
 import { defineTool } from './tool';
 
 const cookieList = defineTool({
@@ -36,8 +35,10 @@ const cookieList = defineTool({
     const browserContext = await context.currentBrowserContext();
     let cookies = await browserContext.cookies();
 
-    if (params.domain)
-      cookies = cookies.filter(c => c.domain.includes(params.domain!));
+    if (params.domain) {
+      const filterDomain = params.domain.toLowerCase().replace(/^\./, '');
+      cookies = cookies.filter(c => c.domain.toLowerCase().replace(/^\./, '').includes(filterDomain));
+    }
     if (params.path)
       cookies = cookies.filter(c => c.path.startsWith(params.path!));
 
@@ -97,14 +98,23 @@ const cookieSet = defineTool({
 
   handle: async (context, params, response) => {
     const browserContext = await context.currentBrowserContext();
-    const tab = await context.ensureTab();
+    let domain = params.domain;
+    if (!domain) {
+      const tab = await context.ensureTab();
+      try {
+        const url = new URL(tab.page.url());
+        if (url.hostname)
+          domain = url.hostname;
+      } catch {
+      }
+      if (!domain)
+        throw new Error(`Cannot infer cookie domain from current page URL "${tab.page.url()}". Please specify "domain".`);
+    }
 
-    // Get the current page URL to determine default domain
-    const url = new URL(tab.page.url());
     const cookie: any = {
       name: params.name,
       value: params.value,
-      domain: params.domain || url.hostname,
+      domain,
       path: params.path || '/',
     };
 
@@ -131,14 +141,21 @@ const cookieDelete = defineTool({
     description: 'Delete a specific cookie',
     inputSchema: z.object({
       name: z.string().describe('Cookie name to delete'),
+      domain: z.string().optional().describe('Filter by cookie domain'),
+      path: z.string().optional().describe('Filter by cookie path'),
     }),
     type: 'action',
   },
 
   handle: async (context, params, response) => {
     const browserContext = await context.currentBrowserContext();
-    await browserContext.clearCookies({ name: params.name });
-    response.addCode(`await page.context().clearCookies({ name: ${escapeWithQuotes(params.name)} });`);
+    const filter: { name: string, domain?: string, path?: string } = { name: params.name };
+    if (params.domain)
+      filter.domain = params.domain;
+    if (params.path)
+      filter.path = params.path;
+    await browserContext.clearCookies(filter);
+    response.addCode(`await page.context().clearCookies(${JSON.stringify(filter)});`);
   },
 });
 

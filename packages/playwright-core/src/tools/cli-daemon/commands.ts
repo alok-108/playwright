@@ -718,8 +718,12 @@ const cookieDelete = declareCommand({
   args: z.object({
     name: z.string().describe('Cookie name'),
   }),
+  options: z.object({
+    domain: z.string().optional().describe('Filter by cookie domain'),
+    path: z.string().optional().describe('Filter by cookie path'),
+  }),
   toolName: 'browser_cookie_delete',
-  toolParams: ({ name }) => ({ name }),
+  toolParams: ({ name, domain, path }) => ({ name, domain, path }),
 });
 
 const cookieClear = declareCommand({
